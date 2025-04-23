@@ -2,8 +2,13 @@ import ast
 import json
 from PIL import Image
 from google import genai
+from constants import GEMINI_API_KEY
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
-client = genai.Client(api_key="AIzaSyCupojB1xw9m-dIuNEESOCD5YR5VHkNtEU")
+
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 def analyze_image(img: Image.Image, dict_of_vars: dict):
