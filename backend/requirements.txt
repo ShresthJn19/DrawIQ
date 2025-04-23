@@ -1,0 +1,5 @@
+pydantic
+fastapi
+google-genai
+pillow 
+uvicorn 
