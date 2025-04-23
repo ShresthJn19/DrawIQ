@@ -3,3 +3,4 @@ fastapi
 google-genai
 pillow 
 uvicorn 
+python-dotenv
