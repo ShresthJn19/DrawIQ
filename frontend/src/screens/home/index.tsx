@@ -147,59 +147,95 @@ export default function Home() {
     const canvas = canvasRef.current;
 
     if (canvas) {
-      const response = await axios.post(
-        import.meta.env.VITE_API_URL + "/calculate",
-        {
-          image: canvas.toDataURL("image/png"),
-          dict_of_vars: dictOfVars,
-        }
-      );
+      try {
+        // Clear previous results
+        setLatexExpression([]);
 
-      const resp = await response.data;
-      console.log("Response", resp);
-      resp.data.forEach((data: Response) => {
-        if (data.assign) {
-          setDictOfVars({ ...dictOfVars, [data.expr]: data.result });
-        }
-      });
+        // Get canvas data and make API call
+        const response = await axios.post(
+          import.meta.env.VITE_API_URL + "/calculate",
+          {
+            image: canvas.toDataURL("image/png"),
+            dict_of_vars: dictOfVars,
+          }
+        );
 
-      const ctx = canvas.getContext("2d");
-      const imageData = ctx!.getImageData(0, 0, canvas.width, canvas.height);
-      let minX = canvas.width,
-        minY = canvas.height,
-        maxX = 0,
-        maxY = 0;
+        const resp = await response.data;
+        console.log("Response", resp);
 
-      for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-          const i = (y * canvas.width + x) * 4;
-          if (imageData.data[i + 3] > 0) {
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
+        // Update variable dictionary if needed
+        const updatedVars = { ...dictOfVars };
+        resp.data.forEach((data: Response) => {
+          if (data.assign) {
+            updatedVars[data.expr] = data.result;
+          }
+        });
+        setDictOfVars(updatedVars);
+
+        // Find canvas drawing boundaries
+        const ctx = canvas.getContext("2d");
+        const imageData = ctx!.getImageData(0, 0, canvas.width, canvas.height);
+        let minX = canvas.width,
+          minY = canvas.height,
+          maxX = 0,
+          maxY = 0;
+
+        for (let y = 0; y < canvas.height; y++) {
+          for (let x = 0; x < canvas.width; x++) {
+            const i = (y * canvas.width + x) * 4;
+            if (imageData.data[i + 3] > 0) {
+              minX = Math.min(minX, x);
+              minY = Math.min(minY, y);
+              maxX = Math.max(maxX, x);
+              maxY = Math.max(maxY, y);
+            }
           }
         }
-      }
 
-      const centerX = (minX + maxX) / 2;
-      const centerY = (minY + maxY) / 2;
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        setLatexPosition({ x: centerX, y: centerY });
 
-      setLatexPosition({ x: centerX, y: centerY });
+        // Process and display results
+        if (resp.data && resp.data.length > 0) {
+          const allResults = resp.data.map((data: Response) => ({
+            expression: data.expr,
+            answer: data.result,
+          }));
 
-      if (resp.data && resp.data.length > 0) {
-        const allResults = resp.data.map((data: Response) => ({
-          expression: data.expr,
-          answer: data.result,
-        }));
+          allResults.forEach((result: GeneratedResult) => {
+            const latex = `\\(\\LARGE{${result.expression} = ${result.answer}}\\)`;
+            setLatexExpression((prev) => [...prev, latex]);
+          });
 
-        allResults.forEach((result: GeneratedResult) => {
-          const latex = `\\(\\LARGE{${result.expression} = ${result.answer}}\\)`;
-          setLatexExpression((prev) => [...prev, latex]);
-        });
+          // Force MathJax rendering after a short delay
+          setTimeout(() => {
+            if (window.MathJax) {
+              window.MathJax.Hub.Queue(["Typeset", window.MathJax.Hub]);
+            }
+          }, 100);
+        }
+
+        // Add this at the end of your function:
+        setTimeout(() => {
+          if (window.MathJax) {
+            try {
+              window.MathJax.Hub.Queue(["Typeset", window.MathJax.Hub]);
+              console.log("MathJax processing triggered");
+            } catch (e) {
+              console.error("MathJax processing error:", e);
+            }
+          } else {
+            console.error("MathJax not loaded");
+          }
+        }, 300);
+      } catch (err) {
+        console.error("Error processing calculation:", err);
       }
     }
   };
+
+  console.log("Current latex expressions:", latexExpression);
 
   return (
     <>
@@ -232,6 +268,25 @@ export default function Home() {
           Calculate
         </Button>
       </div>
+      
+      {latexExpression.length > 0 && (
+        <div className="absolute top-20 right-10 z-30 bg-black/80 p-4 rounded-lg w-80 max-h-[50vh] overflow-y-auto">
+          <h2 className="text-white font-bold mb-2 text-lg">Results:</h2>
+          {latexExpression.map((latex, idx) => (
+            <div key={idx} className="bg-gray-800 mb-2 p-2 rounded text-white">
+              <div className="latex-content">{latex}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      <div className="absolute bottom-40 right-10 z-40 bg-red-800 p-4 text-white">
+        <h3>Debug:</h3>
+        <pre className="text-xs whitespace-pre-wrap">
+          {JSON.stringify(latexExpression, null, 2)}
+        </pre>
+      </div>
+      
       <div className="absolute bottom-10 left-10 z-20 w-60">
         <Slider
           label={
@@ -266,15 +321,20 @@ export default function Home() {
         onMouseUp={stopDrawing}
         onMouseOut={stopDrawing}
       />
+      
+      {/* Keep the draggable elements for more interactive use */}
       {latexExpression &&
         latexExpression.map((latex, index) => (
           <Draggable
             key={index}
-            defaultPosition={latexPosition}
+            defaultPosition={{
+              x: latexPosition.x,
+              y: latexPosition.y + index * 40
+            }}
             onStop={(_, data) => setLatexPosition({ x: data.x, y: data.y })}
           >
             <div
-              className="absolute p-2 text-white rounded shadow-md"
+              className="absolute p-2 text-white bg-black/70 rounded shadow-md"
               style={{ cursor: "pointer" }}
             >
               <div className="latex-content">{latex}</div>
