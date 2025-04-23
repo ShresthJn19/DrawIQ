@@ -90,14 +90,6 @@ export default function Home() {
   const renderLatexToCanvas = (expression: string, answer: string) => {
     const latex = `\\(\\LARGE{${expression} = ${answer}}\\)`;
     setLatexExpression([...latexExpression, latex]);
-
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-    }
   };
 
   const resetCanvas = () => {
@@ -194,14 +186,18 @@ export default function Home() {
       const centerY = (minY + maxY) / 2;
 
       setLatexPosition({ x: centerX, y: centerY });
-      resp.data.forEach((data: Response) => {
-        setTimeout(() => {
-          setResult({
-            expression: data.expr,
-            answer: data.result,
-          });
-        }, 1000);
-      });
+
+      if (resp.data && resp.data.length > 0) {
+        const allResults = resp.data.map((data: Response) => ({
+          expression: data.expr,
+          answer: data.result,
+        }));
+
+        allResults.forEach((result: GeneratedResult) => {
+          const latex = `\\(\\LARGE{${result.expression} = ${result.answer}}\\)`;
+          setLatexExpression((prev) => [...prev, latex]);
+        });
+      }
     }
   };
 
